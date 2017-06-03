@@ -15,8 +15,7 @@ GREEN equ 000FF00h		; Green color constant
 
 .data       
 
-
-	counter DWORD ?
+	counter DWORD ?								; General purpose counter variable
 
 	caption  byte "My Score: ",0				; The Message Box title
 
@@ -27,7 +26,7 @@ GREEN equ 000FF00h		; Green color constant
 		no_gravity DWORD ?						; Doodle wont fall down. never.
 	Cheat ENDS
 
-	cheats Cheat {0,1}
+	cheats Cheat {0,0}
 
 	Doodle STRUCT
 		x DWORD 500								; doodle's x position on the screen
@@ -44,28 +43,26 @@ GREEN equ 000FF00h		; Green color constant
 		x DWORD ?								; platform's x position on the screen
 		y DWORD ?								; platform's y position on the screen
 		image DWORD ?							; The image of the platform
-		jump_val DWORD ?						; The height the jump will add to doodle
+		jump_type DWORD ?						; The height the jump will add to doodle
 	Platform ENDS
-
-	name DWORD ?
 
 	STime SYSTEMTIME  {}						; Used to generate random numbers
 
-	wndTitle BYTE "GAME",0						; Window's name     
+	wndTitle BYTE "Doodle Jump",0						; Window's name     
 	 
     doodle_left Img {}							; the doodle image that is looking left
 	doodle_right Img {}							; the doodle image that is looking right
-
-	background Img {}							; the background image				
-
-	;platform1 Platform {500, 500, {}, 500}
+	background Img {}							; the background image		
+	platform Img {}
+	platform2 Img {}
 
     filename_doodle_left BYTE "DoodleLeft.bmp",0
 	filename_doodle_right BYTE "DoodleRight.bmp",0								
-
+	filename_platform2 BYTE "platform2.bmp",0
 	filename_platform BYTE "platform.bmp",0
-	filename_background BYTE "background2.bmp",0
-    											
+	filename_background BYTE "background.bmp",0
+    							
+								
 	;  srcY								image draw crop meme
    ;srcX;---------------;
 		;				;
@@ -82,28 +79,21 @@ GREEN equ 000FF00h		; Green color constant
 
 	jump_val DWORD 0							; will hold how much the doodle has to jump
 
-	platforms Platform 4 dup ({})
+	platforms Platform 4 dup ({})				; array of platforms (4 plats will be present on the screen at all times)
 
-	total_jump_score DWORD 0					; will hold the score the player got
-
-				; array of platforms (4 plats will be present on the screen at all times)
+	total_jump_score DWORD 0					; will hold the score the player got			
 
 	doodle Doodle {950, 200, 1, ?, ?, 4, 2, 0}
 
-	platform_image Img {}
-
-	tester DWORD 0
-
 	random_num DWORD ?
 
-	exPlatform Platform {}
+	exPlatform Platform {}						; empty platform struct to use with sizeof later
 
-	sumVar dword ?
+	sumVar dword ?								; variable for debugging
 
-	sumVar2 dword 0
+	sumVar2 dword 0								; variable for debugging
 
 .code
-
 
 
 ; Useful macro for writing multiple code instructions on one line of code:
@@ -128,8 +118,29 @@ X macro args:VARARG
 	asm_txt
 endm
 
+
+
+
+;		*************************
+;			UTILS FUNCTIONS
+;		*************************
+
+QuickBreak PROC
+	pusha
+
+	invoke GetAsyncKeyState, VK_LSHIFT
+
+	.if eax != 0
+		xor eax, eax
+	.endif
+
+	popa
+QuickBreak ENDP
+
+
 ; Used to pop a message box with a number in it
-; Parameters - an unsigned number
+; Parameters - an unsigned number that will pop up
+
 ShowResult PROC Num:DWORD
 	; Prints Num
 
@@ -166,7 +177,13 @@ ShowResult ENDP
 
 
 ; Pseudo Random number generator
-; 
+; Parameters:
+; min - the minimum value of the random number
+; max - the maximum value of the random number
+; seed- A number that can be used to make the number more random. 
+;		Just smash your head on the keyboard or pass NULL  if you're lazy.
+;		If the passed parameter is 0 the seed will be ignored.
+
 Random PROC min:DWORD, max:DWORD, seed:DWORD
 	; random = (seed * some big number) % (max - min + 1) + min
 	
@@ -196,13 +213,15 @@ Random PROC min:DWORD, max:DWORD, seed:DWORD
 	mul bx
 	mul ecx
 
-	.if seed == 0
-		mov ecx, seed
-		mul ecx
+	.if seed != 0
+		.if seed != NULL
+			mov ecx, seed
+			mul ecx
+		.endif
 	.endif
 
-	; reset edx to prevent integer overflow (you shouldnt care about why)
-	xor edx, edx
+	; reset edx to prevent integer overflow 
+	 xor edx, edx
 
 	; divides the value in eax by the max value (reminder will be in edx)
 	; (seed * some big number) % (max - min + 1)
@@ -216,65 +235,113 @@ Random PROC min:DWORD, max:DWORD, seed:DWORD
 	
 	; move the random number in edx to your desired variable
 	mov random_num, edx
-	popa
+
+	
 	
 	invoke Sleep, 2
+	popa
 	ret
 Random ENDP
 
 
+;		****************************
+;			PLATFORM FUNCTIONS
+;		****************************
 
 
 
-MoveX PROC	
-	; x axis movement manager of doodle
+
+
+; Initialize all the platforms
+
+InitPlatforms PROC
 	pusha
 
-	check_keyboard:
-		invoke GetAsyncKeyState, VK_RIGHT	
-		.if eax != 0	
+	mov counter, 0
+	mov edi, offset platforms
 
-		X   mov eax, doodle.limit_x	\	cmp doodle.x, eax	\	jge stop
-		X	mov eax, doodle.x	\	add eax, doodle.dirx	\	mov doodle.x, eax	
-		mov doodle.side, 1
-		.endif
+	.while counter < 4
+	mov eax, WIN_WIDTH
+	sub eax, platform.iwidth
 
-		X	invoke GetAsyncKeyState, VK_LEFT	\	cmp eax, 0	\	jne move_left
-		jmp stop
+	invoke Random, 0, eax, edi			; Random X value between 0 and (screen width - picture width)
 
-	move_left: 
-		X	cmp doodle.x, 0	\	jle stop
-		X	mov eax, doodle.x	\	sub eax, doodle.dirx	\	mov doodle.x, eax	
-		mov doodle.side, 0
-		jmp stop
+	mov eax, sizeof exPlatform
 
-	change_direction:
-		X	mov eax, doodle.dirx	\	neg eax	\	mov doodle.dirx, eax
-		jmp stop
-	stop: 
-		popa
-		ret
-MoveX ENDP
+	mov ecx, counter
+	mul ecx
+	mov ebx, random_num
+
+	mov [edi + eax], ebx				; Moving the random X val to the  array
+
+	mov ecx, eax						; Holding eax in ecx because of multiplication later
+	
+	; Calculation Y value
+	mov eax, counter
+	mov ebx, 250
+	mul ebx
+	add eax, 250
+	sub eax, platform.iheight
+
+	mov [edi + ecx + 4], eax			; Moving the Y val to the platform
+	
+	; Moving the platform image offset and jump type to the platform struct 
+
+	invoke Random, 0, 5 , NULL
+
+	.if random_num != 3
+		mov [edi + ecx + 8], offset platform 
+		mov platforms[ecx].jump_type, 1				;first jump type
+	.else
+		; High jump
+		mov [edi + ecx + 8], offset platform2
+		mov platforms[ecx].jump_type, 2				;second jump type
+	.endif
+	inc counter
+	
+	.endw
+
+	popa
+InitPlatforms ENDP
 
 
+DrawPlatforms PROC
+	pusha
+	
+	mov counter,0
+	mov edi, offset platforms
 
+	.while counter < 4
+
+	mov eax, sizeof exPlatform
+	mov ecx, counter
+	mul ecx
+	
+	invoke drd_imageDraw, [edi + eax + 8] , [edi + eax], [edi + eax + 4]
+
+	inc counter
+	.endw
+
+	popa
+	ret
+DrawPlatforms ENDP
+
+
+; push platforms down aas doodle goes up.
+; param - the number of pixels to push it down
 
 PushPlatforms PROC pixels:DWORD
 	pusha
 	
-	mov counter, 0
-
-	mov edi, offset platforms
+	X	mov counter, 0	\	mov edi, offset platforms
 
 	.while counter < 4
 	
-	mov eax, 16
+	mov eax, sizeof exPlatform
 
-	mov ecx, counter
-	mul ecx
-	mov ebx, pixels
+	X	mov ecx, counter	\	mul ecx	\	mov ebx, pixels
 
-	add [edi + 8], ebx
+	add [edi + 4], ebx
 
 	inc counter
 	.endw
@@ -285,22 +352,27 @@ PushPlatforms ENDP
 
 
 
+
+;		**************************
+;			BACKGROUND FUNCS
+;		**************************
+
 PushBackground PROC pixels:DWORD
 	; Push the background up for scrollable screen
 	pusha
-	push eax
-	; Cheacking if the BG reached its highest point and resets it.
-	mov eax, WIN_HEIGHT
 
+	; Cheacking if the BG reached its highest point and resets it.
+
+	mov eax, WIN_HEIGHT
 	.if background_src_y <= eax
 	X	mov eax, background.iheight	\	sub eax, WIN_HEIGHT	\	mov background_src_y, eax
 	.endif
 
 	X	mov eax, pixels	\	sub background_src_y, eax
-	add doodle.y, eax
 
+	add doodle.y, eax
 	invoke PushPlatforms, pixels
-	pop eax
+
 	popa
 	ret
 PushBackground ENDP
@@ -309,6 +381,42 @@ PushBackground ENDP
 
 
 
+;		*************************
+;			DOODLE FUNCTIONS
+;		*************************
+
+; Take care of the doodle's movement on the X axis.
+
+MoveX PROC	
+	pusha
+
+	check_keyboard:
+		invoke GetAsyncKeyState, VK_RIGHT	
+		.if eax != 0
+		; moving right
+			; checking if doodle hits the right border of the window
+
+			X   mov eax, doodle.limit_x	\	cmp doodle.x, eax	\	jge stop
+			X	mov eax, doodle.x	\	add eax, doodle.dirx	\	mov doodle.x, eax	
+		mov doodle.side, 1
+		.endif
+
+		X	invoke GetAsyncKeyState, VK_LEFT
+		.if eax != 0
+		; moving left
+			; checking if doodle hits the right border of the window
+
+			X	cmp doodle.x, 0	\	jle stop
+			X	mov eax, doodle.x	\	sub eax, doodle.dirx	\	mov doodle.x, eax	
+			mov doodle.side, 0
+		.endif
+
+	stop: 
+		popa
+		ret
+MoveX ENDP
+
+; Jumps doodle
 Jump PROC jumptype:DWORD
 	pusha
 	.if jumptype == 1
@@ -322,6 +430,7 @@ Jump PROC jumptype:DWORD
 	.endif
 	ret
 Jump ENDP
+
 
 MoveY PROC	
 	;This is in charge of the doodle's movement on axis Y
@@ -357,6 +466,7 @@ MoveY PROC
 	ret
 MoveY ENDP
 
+
 MovementManger PROC	
 	pusha
 	inc turn
@@ -376,95 +486,14 @@ MovementManger ENDP
 
 
 
-DrawPlatforms PROC
-	pusha
-	
-	mov counter,0
-
-	mov edi, offset platforms
-	mov sumVar, edi
-
-	.while counter < 4
-
-	mov eax, 16
-	mov ecx, counter
-	mul ecx
-	
-	
-
-	mov ebx, [edi + eax + 8]
-	mov ecx, [edi + eax + 4]
-	mov edx, [edi + eax]
-	pusha
-	invoke drd_imageDraw, dword ptr [edi + eax + 8] , [edi + eax], [edi + eax + 4]
-	inc sumVar2
-	popa
-
-	inc counter
-	
-	.endw
-
-	popa
-	ret
-DrawPlatforms ENDP
 
 
+;		***********************
+;			GAMEPLAY FUNCS
+;		***********************
 
 
-
-InitPlatforms PROC
-	pusha
-	
-	;measuring which part of the memory to access.
-
-	mov counter, 0
-
-	mov edi, offset platforms
-
-	.while counter < 4
-
-	invoke Sleep, 2
-
-	mov eax, WIN_WIDTH
-	sub eax, platform_image.iwidth
-
-	invoke Random, 0, eax, edi
-	
-	mov eax, sizeof exPlatform
-
-	mov ecx, counter
-	mul ecx
-	mov ebx, random_num
-
-	mov esi, offset doodle
-
-	mov [edi + eax], ebx
-
-	mov ecx, eax
-
-	mov eax, counter
-	mov ebx, 250
-	mul ebx
-	add eax, 250
-	sub eax, platform_image.iheight
-
-	add ecx, 4
-	mov [edi + ecx], eax
-
-	;invoke drd_imageDraw, offset platform_image, platforms[ecx].x, platforms[ecx].y
-
-	add ecx, 4
-	mov [edi + ecx], offset platform_image
-	inc counter
-	
-	.endw
-
-	popa
-InitPlatforms ENDP
-
-
-
-
+; The main doodle jump game proc
 MainGame PROC
 	pusha
 
@@ -474,9 +503,9 @@ MainGame PROC
 	invoke drd_imageDrawCrop, offset background, 0, 0, 0, background_src_y, WIN_WIDTH, WIN_HEIGHT
 
 	.if doodle.side == 1
-	invoke drd_imageDraw, offset doodle_right, doodle.x, doodle.y
+		invoke drd_imageDraw, offset doodle_right, doodle.x, doodle.y
 	.elseif doodle.side == 0
-	invoke drd_imageDraw, offset doodle_left, doodle.x, doodle.y
+		invoke drd_imageDraw, offset doodle_left, doodle.x, doodle.y
 	.endif
 
 	invoke DrawPlatforms
@@ -488,28 +517,32 @@ MainGame ENDP
 
 init PROC	
 	pusha
-	; load files, init all the none constand vriables that wont change during the run, 
-	; initialize all the platforms with random values 
+	; load files, 
+	
 
 	invoke drd_imageLoadFile, offset filename_doodle_left , offset doodle_left
 	invoke drd_imageLoadFile, offset filename_doodle_right , offset doodle_right
 	invoke drd_imageLoadFile, offset filename_background , offset background
-	invoke drd_imageLoadFile, offset filename_platform , offset platform_image
+	invoke drd_imageLoadFile, offset filename_platform , offset platform
 
+	; init all the none constant variables that wont change during the run. 
 	X	mov eax, WIN_WIDTH \ sub eax, doodle_left.iwidth  \ mov doodle.limit_x, eax
 	X	mov eax, WIN_HEIGHT \ sub eax, doodle_left.iheight  \	sub eax, 150	\	mov doodle.limit_y, eax
 	X	mov eax, background.iheight	\	sub eax, WIN_HEIGHT	\	mov background_src_y, eax
 
+	; Clearing the green screen off the images
 	invoke drd_imageSetTransparent, offset doodle_left, GREEN
 	invoke drd_imageSetTransparent, offset doodle_right, GREEN
-	invoke drd_imageSetTransparent, offset platform_image, GREEN
+	invoke drd_imageSetTransparent, offset platform, GREEN
 
+	; initialize all the platforms with random X values 
 	invoke InitPlatforms
 
 	popa
 	ret
 init ENDP
 
+; Checking if the escape bottun was pressed and quiting if so.
 CheckQuit PROC
 	pusha
 
@@ -523,6 +556,13 @@ CheckQuit PROC
 	ret
 	
 CheckQuit ENDP
+
+
+
+;		****************************
+;					MAIN
+;		****************************
+
 
 main PROC
 
