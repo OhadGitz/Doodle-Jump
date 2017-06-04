@@ -121,9 +121,16 @@ endm
 
 
 
-;		*************************
-;			UTILS FUNCTIONS
-;		*************************
+
+;		***************************************************************
+
+;							UTILS FUNCTIONS
+
+;		***************************************************************
+
+
+
+
 
 QuickBreak PROC
 	pusha
@@ -135,6 +142,7 @@ QuickBreak PROC
 	.endif
 
 	popa
+	ret
 QuickBreak ENDP
 
 
@@ -244,11 +252,15 @@ Random PROC min:DWORD, max:DWORD, seed:DWORD
 Random ENDP
 
 
-;		****************************
-;			PLATFORM FUNCTIONS
-;		****************************
 
 
+
+
+;		***************************************************************
+
+;							PLATFORMS FUNCTIONS
+
+;		***************************************************************
 
 
 
@@ -304,6 +316,7 @@ InitPlatforms PROC
 	popa
 InitPlatforms ENDP
 
+; Draws every platform in the array
 
 DrawPlatforms PROC
 	pusha
@@ -353,9 +366,14 @@ PushPlatforms ENDP
 
 
 
-;		**************************
-;			BACKGROUND FUNCS
-;		**************************
+
+;		***************************************************************
+
+;							BACKGROUND FUNCTIONS
+
+;		***************************************************************
+
+; changing the background height
 
 PushBackground PROC pixels:DWORD
 	; Push the background up for scrollable screen
@@ -381,9 +399,13 @@ PushBackground ENDP
 
 
 
-;		*************************
-;			DOODLE FUNCTIONS
-;		*************************
+;		***************************************************************
+
+;							DOODLE FUNCTIONS
+
+;		***************************************************************
+
+
 
 ; Take care of the doodle's movement on the X axis.
 
@@ -432,32 +454,104 @@ Jump PROC jumptype:DWORD
 Jump ENDP
 
 
+
+; checking if doodle colides with a given platform
+
+Collide PROC plat:DWORD
+	pusha
+	mov edi,  dword ptr plat
+	mov eax, [edi]					; Platform's X value
+
+	mov ebx, [edi + 8]				; platform's image pointer.
+	mov ecx, [ebx  + 4]				; platform's image width
+	add ecx, eax					; platform's image right boundry
+
+
+	mov ebx, doodle.x
+	sub ebx, doodle_right.iwidth	; most right point in doodle
+
+	; check fitting x values
+	.if ebx >= eax	
+	.if doodle.x <= ecx
+
+	; check fittin y values
+		
+		mov eax, [edi + 4]		; platform's Y value
+		mov ebx, [edi + 8]	; platform's image pointer
+		mov ecx, [ebx  + 8]		; platform's image height
+
+		mov edx, eax
+		sub edx, ecx				; platform's image lower boundry
+
+		.if doodle.y <= eax	
+		.if doodle.y >= edx
+
+		invoke Jump, [plat + 16]
+		
+		.endif
+		.endif
+	.endif
+	.endif
+
+	popa
+	ret
+Collide ENDP
+
+
+; Collide wrapper
+
+CheckCollision PROC
+	pusha
+
+	mov counter,0
+	mov edi, offset platforms
+
+	.while counter < 4
+
+	mov eax, sizeof exPlatform
+	mov ecx, counter
+	mul ecx
+
+	invoke QuickBreak
+
+	invoke Collide, addr platforms[eax]
+
+	inc counter
+	.endw
+
+	popa
+	ret
+CheckCollision ENDP
+
+
+
+
+
 MoveY PROC	
 	;This is in charge of the doodle's movement on axis Y
 
 	pusha
 
-	; ignore
+	; cheats
 	.if cheats.no_gravity == 1
-	invoke Jump, 2
+		invoke Jump, 2
+		mov  eax, doodle.diry
+		add doodle.jump_val, eax
 	.endif
 
-	.if doodle.y <= 200
-		;doodle reached the top
+	.if doodle.y <= 200			;doodle reached the top
+
 		invoke PushBackground, doodle.diry
 	.elseif doodle.y > WIN_HEIGHT	
 			invoke ShowResult, total_jump_score
 	.endif
 
 	
-	.if doodle.jump_val == 0
+	.if doodle.jump_val <= 0
 		X	mov eax, doodle.diry	\	add doodle.y, eax
 
 	.else
-		.if cheats.no_gravity == 1
-		mov  eax, doodle.diry
-		add doodle.jump_val, eax
-		.endif
+
 		X	mov eax, doodle.diry	\	sub doodle.jump_val, eax	\	sub doodle.y, eax	
 
 	.endif
@@ -476,6 +570,7 @@ MovementManger PROC
 		
 		invoke MoveY
 		invoke MoveX
+		invoke CheckCollision
 
 	.endif
 
@@ -488,9 +583,11 @@ MovementManger ENDP
 
 
 
-;		***********************
-;			GAMEPLAY FUNCS
-;		***********************
+;		***************************************************************
+
+;							GAMEPLAY FUNCTIONS
+
+;		***************************************************************
 
 
 ; The main doodle jump game proc
@@ -570,7 +667,7 @@ main PROC
 	invoke init
 
 	mainGameLoop:
-
+		
 		invoke MainGame
 		;invoke drd_printFps, NULL
 		invoke drd_processMessages
