@@ -1,5 +1,6 @@
 ;TODO 
-;
+;PUSH PLATS
+;RED PLAT
 include \masm32\include\masm32rt.inc
 
 includelib msvcrt.lib
@@ -354,7 +355,7 @@ PushPlatforms PROC pixels:DWORD
 
 	X	mov ecx, counter	\	mul ecx	\	mov ebx, pixels
 
-	add [edi + 4], ebx
+	add [edi + eax + 4], ebx
 
 	inc counter
 	.endw
@@ -397,7 +398,14 @@ PushBackground ENDP
 
 
 
+HandlePlatform PROC
+	pusha
 
+
+
+	popa
+	ret
+HandlePlatforms ENDP
 
 ;		***************************************************************
 
@@ -453,7 +461,32 @@ Jump PROC jumptype:DWORD
 	ret
 Jump ENDP
 
+;David's check collision
+;puts in eax 1 if there is collision, 0 if not.
 
+DidCollide PROC x1: DWORD, y1: DWORD, w1: DWORD, h1: DWORD, x2: DWORD, y2: DWORD, w2: DWORD, h2: DWORD
+
+	 ;checks if right of the platform
+	 X mov eax, x2 \ add eax, w2 \ cmp x1, eax \ jg noCollision 
+ 
+	 ;checks if left of the platform
+	 X sub eax, w2 \ sub eax, w1 \ cmp x1, eax \ jl noCollision 
+ 
+	 ;checks if below the platform
+	 X mov eax, y2 \ add eax, h2 \ cmp y1, eax \ jg noCollision 
+ 
+	 ;checks if above the platform
+	 X sub eax, h2 \ sub eax, h1 \ cmp y1, eax \ jl noCollision 
+
+	 ;if comes to here there is collision
+	 mov eax, 1
+	 jmp Exit
+
+	 noCollision:
+	 mov eax, 0
+	 Exit:
+	 ret
+DidCollide ENDP
 
 ; checking if doodle colides with a given platform
 
@@ -463,36 +496,12 @@ Collide PROC plat:DWORD
 	mov eax, [edi]					; Platform's X value
 
 	mov ebx, [edi + 8]				; platform's image pointer.
-	mov ecx, [ebx  + 4]				; platform's image width
-	add ecx, eax					; platform's image right boundry
 
+	invoke DidCollide, doodle.x, doodle.y, doodle_right.iwidth, doodle_right.iheight, [edi], [edi + 4], [ebx  + 4], [ebx  + 8]
 
-	mov ebx, doodle.x
-	sub ebx, doodle_right.iwidth	; most right point in doodle
-
-	; check fitting x values
-	.if ebx >= eax	
-	.if doodle.x <= ecx
-
-	; check fittin y values
-		
-		mov eax, [edi + 4]		; platform's Y value
-		mov ebx, [edi + 8]	; platform's image pointer
-		mov ecx, [ebx  + 8]		; platform's image height
-
-		mov edx, eax
-		sub edx, ecx				; platform's image lower boundry
-
-		.if doodle.y <= eax	
-		.if doodle.y >= edx
-
-		invoke Jump, [plat + 16]
-		
-		.endif
-		.endif
+	.if eax == 1
+		invoke Jump, 1
 	.endif
-	.endif
-
 	popa
 	ret
 Collide ENDP
@@ -565,7 +574,7 @@ MovementManger PROC
 	pusha
 	inc turn
 
-	.if turn == 5
+	.if turn == 3
 		mov turn, 0	
 		
 		invoke MoveY
@@ -605,7 +614,7 @@ MainGame PROC
 		invoke drd_imageDraw, offset doodle_left, doodle.x, doodle.y
 	.endif
 
-	invoke DrawPlatforms
+	invoke HandlePlatforms
 
 	popa
 	ret
