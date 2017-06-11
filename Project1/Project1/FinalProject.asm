@@ -15,6 +15,7 @@ GREEN equ 000FF00h		; Green color constant
 
 
 .data       
+	gravity DWORD 1
 
 	counter DWORD ?								; General purpose counter variable
 
@@ -25,9 +26,10 @@ GREEN equ 000FF00h		; Green color constant
 	Cheat STRUCT								
 		easy_plats DWORD ?						; Platforms will spawn in a line, making it easy to jump
 		no_gravity DWORD ?						; Doodle wont fall down. never.
+		only_red_plats DWORD ?
 	Cheat ENDS
 
-	cheats Cheat {0,0}
+	cheats Cheat {0,0,0}
 
 	Doodle STRUCT
 		x DWORD 500								; doodle's x position on the screen
@@ -55,11 +57,11 @@ GREEN equ 000FF00h		; Green color constant
 	doodle_right Img {}							; the doodle image that is looking right
 	background Img {}							; the background image		
 	platform Img {}
-	platform2 Img {}
+	platform_red Img {}
 
     filename_doodle_left BYTE "DoodleLeft.bmp",0
 	filename_doodle_right BYTE "DoodleRight.bmp",0								
-	filename_platform2 BYTE "platform2.bmp",0
+	filename_platform_red BYTE "platform_red.bmp",0
 	filename_platform BYTE "platform.bmp",0
 	filename_background BYTE "background.bmp",0
     							
@@ -86,7 +88,7 @@ GREEN equ 000FF00h		; Green color constant
 
 	doodle Doodle {950, 200, 1, ?, ?, 4, 2, 0}
 
-	random_num DWORD ?
+	random_num DWORD 1
 
 	exPlatform Platform {}						; empty platform struct to use with sizeof later
 
@@ -94,6 +96,7 @@ GREEN equ 000FF00h		; Green color constant
 
 	sumVar2 dword 0								; variable for debugging
 
+	gravity_turn DWORD 5
 .code
 
 
@@ -193,7 +196,7 @@ ShowResult ENDP
 ;		Just smash your head on the keyboard or pass NULL  if you're lazy.
 ;		If the passed parameter is 0 the seed will be ignored.
 
-Random PROC min:DWORD, max:DWORD, seed:DWORD
+Random PROC min:DWORD, max:DWORD
 	; random = (seed * some big number) % (max - min + 1) + min
 	
 	pusha
@@ -213,21 +216,12 @@ Random PROC min:DWORD, max:DWORD, seed:DWORD
 	invoke GetTickCount
 	mov ecx, eax
 
-	mov ax, STime.wMilliseconds
-	mov bx, STime.wSecond
-
 	; multiplies eax by the current miliseconds and seconds (ax and bx)
 	; (seed * some big number)
-	mul ax
-	mul bx
+	; following java's lcg generation.
 	mul ecx
-
-	.if seed != 0
-		.if seed != NULL
-			mov ecx, seed
-			mul ecx
-		.endif
-	.endif
+	mul random_num
+	add eax, 11
 
 	; reset edx to prevent integer overflow 
 	 xor edx, edx
@@ -245,8 +239,6 @@ Random PROC min:DWORD, max:DWORD, seed:DWORD
 	; move the random number in edx to your desired variable
 	mov random_num, edx
 
-	
-	
 	invoke Sleep, 2
 	popa
 	ret
@@ -277,7 +269,7 @@ InitPlatforms PROC
 	mov eax, WIN_WIDTH
 	sub eax, platform.iwidth
 
-	invoke Random, 0, eax, edi			; Random X value between 0 and (screen width - picture width)
+	invoke Random, 1, eax			; Random X value between 0 and (screen width - picture width)
 
 	mov eax, sizeof exPlatform
 
@@ -300,16 +292,21 @@ InitPlatforms PROC
 	
 	; Moving the platform image offset and jump type to the platform struct 
 
-	invoke Random, 0, 5 , NULL
+	invoke Random, 1, 3
 
-	.if random_num != 3
+	.if cheats.only_red_plats == 1
+		mov random_num, 1
+	.endif
+
+	.if random_num != 1
 		mov [edi + ecx + 8], offset platform 
 		mov platforms[ecx].jump_type, 1				;first jump type
 	.else
 		; High jump
-		mov [edi + ecx + 8], offset platform2
+		mov [edi + ecx + 8], offset platform_red
 		mov platforms[ecx].jump_type, 2				;second jump type
 	.endif
+
 	inc counter
 	
 	.endw
@@ -357,6 +354,7 @@ PushPlatforms PROC pixels:DWORD
 
 	add [edi + eax + 4], ebx
 
+
 	inc counter
 	.endw
 
@@ -364,8 +362,63 @@ PushPlatforms PROC pixels:DWORD
 	popa
 PushPlatforms ENDP
 
+MakePlatform PROC plat:Platform
+	pusha
+
+	invoke Random, 1, eax			; Random X value between 0 and (screen width - picture width)
+
+	mov ebx, random_num
+
+	mov plat.x, ebx				; Moving the random X val to the  array
+
+	mov plat.y, 0			; Moving the Y val to the platform
+	
+	; Moving the platform image offset and jump type to the platform struct 
+
+	invoke Random, 1, 3
+
+	.if cheats.only_red_plats == 1
+		mov random_num, 1
+	.endif
+
+	.if random_num != 1
+		mov plat.image, offset platform 
+		mov plat.jump_type, 1				;first jump type
+	.else
+		; High jump
+		mov plat.image, offset platform_red
+		mov plat.jump_type, 2				;second jump type
+	.endif
 
 
+	popa
+	ret
+MakePlatform ENDP
+
+HandlePlatforms PROC
+	pusha
+
+		X	mov counter, 0	\	mov edi, offset platforms
+
+	.while counter < 4
+	
+	mov eax, sizeof exPlatform
+
+	X	mov ecx, counter	\	mul ecx	\	mov eax, WIN_HEIGHT
+
+	add edi, ecx
+	.if [edi + 4] >= eax
+	
+	invoke MakePlatform, edi 
+
+	.endif
+
+	inc counter
+	.endw
+
+	popa
+	ret
+HandlePlatforms ENDP
 
 
 ;		***************************************************************
@@ -398,14 +451,7 @@ PushBackground ENDP
 
 
 
-HandlePlatform PROC
-	pusha
 
-
-
-	popa
-	ret
-HandlePlatforms ENDP
 
 ;		***************************************************************
 
@@ -557,8 +603,9 @@ MoveY PROC
 
 	
 	.if doodle.jump_val <= 0
-		X	mov eax, doodle.diry	\	add doodle.y, eax
 
+		X	mov eax, doodle.diry	\	add doodle.y, eax
+		
 	.else
 
 		X	mov eax, doodle.diry	\	sub doodle.jump_val, eax	\	sub doodle.y, eax	
@@ -598,15 +645,12 @@ MovementManger ENDP
 
 ;		***************************************************************
 
-
-; The main doodle jump game proc
-MainGame PROC
+Draw PROC
 	pusha
-
-	invoke MovementManger
-
 	invoke drd_pixelsClear, 0
 	invoke drd_imageDrawCrop, offset background, 0, 0, 0, background_src_y, WIN_WIDTH, WIN_HEIGHT
+
+	invoke DrawPlatforms
 
 	.if doodle.side == 1
 		invoke drd_imageDraw, offset doodle_right, doodle.x, doodle.y
@@ -614,6 +658,16 @@ MainGame PROC
 		invoke drd_imageDraw, offset doodle_left, doodle.x, doodle.y
 	.endif
 
+	popa
+	ret
+Draw ENDP
+
+; The main doodle jump game proc
+MainGame PROC
+	pusha
+
+	invoke MovementManger
+	invoke Draw
 	invoke HandlePlatforms
 
 	popa
@@ -630,6 +684,7 @@ init PROC
 	invoke drd_imageLoadFile, offset filename_doodle_right , offset doodle_right
 	invoke drd_imageLoadFile, offset filename_background , offset background
 	invoke drd_imageLoadFile, offset filename_platform , offset platform
+	invoke drd_imageLoadFile, offset filename_platform_red , offset platform_red
 
 	; init all the none constant variables that wont change during the run. 
 	X	mov eax, WIN_WIDTH \ sub eax, doodle_left.iwidth  \ mov doodle.limit_x, eax
@@ -640,6 +695,7 @@ init PROC
 	invoke drd_imageSetTransparent, offset doodle_left, GREEN
 	invoke drd_imageSetTransparent, offset doodle_right, GREEN
 	invoke drd_imageSetTransparent, offset platform, GREEN
+	invoke drd_imageSetTransparent, offset platform_red, GREEN
 
 	; initialize all the platforms with random X values 
 	invoke InitPlatforms
