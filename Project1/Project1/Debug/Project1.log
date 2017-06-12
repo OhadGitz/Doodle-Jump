@@ -1,4 +1,3 @@
 ﻿  Assembling FinalProject.asm...
-FinalProject.asm(414): error A2114: INVOKE argument type mismatch : argument : 1
-FinalProject.asm(368): error A2098: invalid operand for OFFSET
-C:\Program Files (x86)\VS17\Common7\IDE\VC\VCTargets\BuildCustomizations\masm.targets(50,5): error MSB3721: The command "ml.exe /c /nologo /Zi /Fo"Debug\FinalProject.obj" /W3 /errorReport:prompt  /TaFinalProject.asm" exited with code 1.
+  Project1.vcxproj -> C:\Users\Ohad PC\Documents\Visual Studio 2013\Projects\Doodle-Jump\Project1\Debug\Project1.exe
+  Project1.vcxproj -> C:\Users\Ohad PC\Documents\Visual Studio 2013\Projects\Doodle-Jump\Project1\Debug\Project1.pdb (Partial PDB)

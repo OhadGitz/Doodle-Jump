@@ -7,7 +7,7 @@ includelib msvcrt.lib
 include drd.inc
 includelib drd.lib
 
-WIN_WIDTH equ 1900		; Window's width constant
+WIN_WIDTH equ 1000		; Window's width constant
 WIN_HEIGHT equ 1050		; Wondow's height constant
 
 GREEN equ 000FF00h		; Green color constant
@@ -97,6 +97,8 @@ GREEN equ 000FF00h		; Green color constant
 	sumVar2 dword 0								; variable for debugging
 
 	gravity_turn DWORD 5
+
+	next DWORD 0
 .code
 
 
@@ -187,7 +189,6 @@ ShowResult PROC Num:DWORD
 	ret
 ShowResult ENDP
 
-
 ; Pseudo Random number generator
 ; Parameters:
 ; min - the minimum value of the random number
@@ -228,6 +229,11 @@ Random PROC min:DWORD, max:DWORD
 
 	; divides the value in eax by the max value (reminder will be in edx)
 	; (seed * some big number) % (max - min + 1)
+
+
+	.if max == 0
+		mov max, 1
+	.endif
 
 	div max
 	
@@ -362,16 +368,24 @@ PushPlatforms PROC pixels:DWORD
 	popa
 PushPlatforms ENDP
 
-MakePlatform PROC plat:Platform
+MakePlatform PROC plat:DWORD
 	pusha
 
-	invoke Random, 1, eax			; Random X value between 0 and (screen width - picture width)
+	mov edi, offset platforms
 
+	mov ebx, WIN_WIDTH
+	sub ebx, platform.iwidth
+
+	mov eax, sizeof exPlatform
+	mov ecx, plat
+	mul ecx
+
+	invoke Random, 1, ebx					; Random X value between 0 and (screen width - picture width)
 	mov ebx, random_num
 
-	mov plat.x, ebx				; Moving the random X val to the  array
+	mov platforms[eax].x, ebx					; Moving the random X val to the  array
 
-	mov plat.y, 0			; Moving the Y val to the platform
+	mov platforms[eax].y, 0						; Moving the Y val to the platform
 	
 	; Moving the platform image offset and jump type to the platform struct 
 
@@ -381,13 +395,14 @@ MakePlatform PROC plat:Platform
 		mov random_num, 1
 	.endif
 
+	add ecx, 4
 	.if random_num != 1
-		mov plat.image, offset platform 
-		mov plat.jump_type, 1				;first jump type
+		mov platforms[eax].image, offset platform 
+		mov platforms[eax].jump_type, 1				;first jump type
 	.else
 		; High jump
-		mov plat.image, offset platform_red
-		mov plat.jump_type, 2				;second jump type
+		mov platforms[eax].image, offset platform 
+		mov platforms[eax].jump_type, 2				;second jump type
 	.endif
 
 
@@ -398,18 +413,17 @@ MakePlatform ENDP
 HandlePlatforms PROC
 	pusha
 
-		X	mov counter, 0	\	mov edi, offset platforms
+	X	mov counter, 0	\	mov edi, offset platforms
 
 	.while counter < 4
 	
 	mov eax, sizeof exPlatform
 
-	X	mov ecx, counter	\	mul ecx	\	mov eax, WIN_HEIGHT
+	X	mov ecx, counter	\	mul ecx	\	mov edx, eax \ mov eax, WIN_HEIGHT
 
-	add edi, ecx
-	.if [edi + 4] >= eax
-	
-	invoke MakePlatform, edi 
+	.if platforms[edx].y >= eax
+
+	invoke MakePlatform, ecx
 
 	.endif
 
@@ -495,14 +509,16 @@ MoveX ENDP
 ; Jumps doodle
 Jump PROC jumptype:DWORD
 	pusha
-	.if jumptype == 1
-		mov doodle.jump_val, 500
-		add total_jump_score, 5
+	.if doodle.jump_val == 0
+		.if jumptype == 1
+			mov doodle.jump_val, 500
+			add total_jump_score, 5
 
-	.elseif jumptype == 2
-		mov doodle.jump_val, 1500
-		add total_jump_score, 15
+		.elseif jumptype == 2
+			mov doodle.jump_val, 1500
+			add total_jump_score, 15
 
+		.endif
 	.endif
 	ret
 Jump ENDP
@@ -539,11 +555,14 @@ DidCollide ENDP
 Collide PROC plat:DWORD
 	pusha
 	mov edi,  dword ptr plat
-	mov eax, [edi]					; Platform's X value
+
+	mov eax, doodle.y					; Platform's X value
+	add eax, doodle_right.iheight
 
 	mov ebx, [edi + 8]				; platform's image pointer.
 
-	invoke DidCollide, doodle.x, doodle.y, doodle_right.iwidth, doodle_right.iheight, [edi], [edi + 4], [ebx  + 4], [ebx  + 8]
+
+	invoke DidCollide, doodle.x, eax, doodle_right.iwidth, 0, [edi], [edi + 4], [ebx  + 4], [ebx  + 8]
 
 	.if eax == 1
 		invoke Jump, 1
@@ -621,7 +640,7 @@ MovementManger PROC
 	pusha
 	inc turn
 
-	.if turn == 3
+	.if turn == 5
 		mov turn, 0	
 		
 		invoke MoveY
