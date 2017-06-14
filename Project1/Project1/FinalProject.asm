@@ -7,15 +7,33 @@ includelib msvcrt.lib
 include drd.inc
 includelib drd.lib
 
-WIN_WIDTH equ 1000		; Window's width constant
-WIN_HEIGHT equ 1050		; Wondow's height constant
+WIN_WIDTH equ 1920		; Window's width constant
+WIN_HEIGHT equ 1080		; Wondow's height constant
 
 GREEN equ 000FF00h		; Green color constant
 
 
 
 .data       
-	gravity DWORD 1
+
+	Option STRUCT
+		x DWORD ?
+		y DWORD ?
+		isChosen DWORD ?
+		image DWORD ?
+	Option ENDS
+
+	start_game Option <>
+
+	how_to_play Option <>
+
+	enable_only_red Option <>
+
+	enable_no_gravity Option <>
+
+	enable_easy_plats Option <>
+	
+	screenId DWORD 0
 
 	counter DWORD ?								; General purpose counter variable
 
@@ -58,12 +76,18 @@ GREEN equ 000FF00h		; Green color constant
 	background Img {}							; the background image		
 	platform Img {}
 	platform_red Img {}
+	welcome Img {}
+	start_option Img {}
+	help_option Img {}
 
-    filename_doodle_left BYTE "DoodleLeft.bmp",0
-	filename_doodle_right BYTE "DoodleRight.bmp",0								
-	filename_platform_red BYTE "platform_red.bmp",0
-	filename_platform BYTE "platform.bmp",0
+    filename_doodle_left BYTE "GameObjects\DoodleLeft.bmp",0
+	filename_doodle_right BYTE "GameObjects\DoodleRight.bmp",0								
+	filename_platform_red BYTE "GameObjects\platform_red.bmp",0
+	filename_platform BYTE "GameObjects\platform.bmp",0
 	filename_background BYTE "background.bmp",0
+	filename_welcome BYTE "WelcomeScreen\WelcomeScreen.bmp",0
+	filename_start_option BYTE "WelcomeScreen\Start.bmp",0
+	filename_how_to_play_option BYTE "WelcomeScreen\Help.bmp",0
     							
 								
 	;  srcY								image draw crop meme
@@ -96,9 +120,6 @@ GREEN equ 000FF00h		; Green color constant
 
 	sumVar2 dword 0								; variable for debugging
 
-	gravity_turn DWORD 5
-
-	next DWORD 0
 .code
 
 
@@ -224,6 +245,8 @@ Random PROC min:DWORD, max:DWORD
 	mul random_num
 	add eax, 11
 
+	shr eax, 11
+
 	; reset edx to prevent integer overflow 
 	 xor edx, edx
 
@@ -281,24 +304,25 @@ InitPlatforms PROC
 
 	mov ecx, counter
 	mul ecx
-	mov ebx, random_num
+
+	.if cheats.easy_plats != 1
+		mov ebx, random_num
+	.else 
+		mov ebx, doodle.x
+	.endif
 
 	mov [edi + eax], ebx				; Moving the random X val to the  array
 
 	mov ecx, eax						; Holding eax in ecx because of multiplication later
 	
 	; Calculation Y value
-	mov eax, counter
-	mov ebx, 250
-	mul ebx
-	add eax, 250
-	sub eax, platform.iheight
+	X	mov eax, counter	\	mov ebx, 250	\	mul ebx	\	add eax, 250	\	sub eax, platform.iheight
 
 	mov [edi + ecx + 4], eax			; Moving the Y val to the platform
 	
 	; Moving the platform image offset and jump type to the platform struct 
 
-	invoke Random, 1, 3
+	invoke Random, 1, 2
 
 	.if cheats.only_red_plats == 1
 		mov random_num, 1
@@ -318,6 +342,7 @@ InitPlatforms PROC
 	.endw
 
 	popa
+	ret
 InitPlatforms ENDP
 
 ; Draws every platform in the array
@@ -330,9 +355,7 @@ DrawPlatforms PROC
 
 	.while counter < 4
 
-	mov eax, sizeof exPlatform
-	mov ecx, counter
-	mul ecx
+	X	mov eax, sizeof exPlatform	\	mov ecx, counter	\	mul ecx
 	
 	invoke drd_imageDraw, [edi + eax + 8] , [edi + eax], [edi + eax + 4]
 
@@ -381,7 +404,12 @@ MakePlatform PROC plat:DWORD
 	mul ecx
 
 	invoke Random, 1, ebx					; Random X value between 0 and (screen width - picture width)
-	mov ebx, random_num
+
+	.if cheats.easy_plats != 1
+		mov ebx, random_num
+	.else 
+		mov ebx, doodle.x
+	.endif
 
 	mov platforms[eax].x, ebx					; Moving the random X val to the  array
 
@@ -389,7 +417,7 @@ MakePlatform PROC plat:DWORD
 	
 	; Moving the platform image offset and jump type to the platform struct 
 
-	invoke Random, 1, 3
+	invoke Random, 1, 10
 
 	.if cheats.only_red_plats == 1
 		mov random_num, 1
@@ -401,7 +429,7 @@ MakePlatform PROC plat:DWORD
 		mov platforms[eax].jump_type, 1				;first jump type
 	.else
 		; High jump
-		mov platforms[eax].image, offset platform 
+		mov platforms[eax].image, offset platform_red
 		mov platforms[eax].jump_type, 2				;second jump type
 	.endif
 
@@ -511,12 +539,13 @@ Jump PROC jumptype:DWORD
 	pusha
 	.if doodle.jump_val == 0
 		.if jumptype == 1
-			mov doodle.jump_val, 500
+			mov doodle.jump_val, 700
 			add total_jump_score, 5
 
 		.elseif jumptype == 2
-			mov doodle.jump_val, 1500
+			mov doodle.jump_val, 1600
 			add total_jump_score, 15
+			inc doodle.diry
 
 		.endif
 	.endif
@@ -558,14 +587,24 @@ Collide PROC plat:DWORD
 
 	mov eax, doodle.y					; Platform's X value
 	add eax, doodle_right.iheight
+	sub eax, 20
 
 	mov ebx, [edi + 8]				; platform's image pointer.
 
+	mov ecx, doodle_right.iwidth
+	mov edx, doodle.x
 
-	invoke DidCollide, doodle.x, eax, doodle_right.iwidth, 0, [edi], [edi + 4], [ebx  + 4], [ebx  + 8]
+	.if doodle.side == 1			; fine tuning the collision
+		sub ecx, 60
+	.elseif doodle.side == 0
+		sub ecx, 120
+		add edx, 60
+	.endif
+
+	invoke DidCollide, edx, eax, ecx, 2,0 [edi], [edi + 4], [ebx  + 4], [ebx  + 8]
 
 	.if eax == 1
-		invoke Jump, 1
+		invoke Jump, [edi + 12]
 	.endif
 	popa
 	ret
@@ -623,8 +662,12 @@ MoveY PROC
 	
 	.if doodle.jump_val <= 0
 
-		X	mov eax, doodle.diry	\	add doodle.y, eax
+		X	mov eax, doodle.diry	\	add doodle.y, eax	\	mov doodle.jump_val,0
 		
+	.elseif doodle.jump_val > 3000
+		;something cant be right
+		X	mov doodle.jump_val, 0
+
 	.else
 
 		X	mov eax, doodle.diry	\	sub doodle.jump_val, eax	\	sub doodle.y, eax	
@@ -693,12 +736,26 @@ MainGame PROC
 	ret
 MainGame ENDP
 
+WelcomeScreen PROC
+	pusha
+
+	invoke drd_imageDraw, offset background,0,0
+	invoke drd_imageDraw, offset welcome, 0, 0
+
+	invoke GetAsyncKeyState, VK_RETURN
+	
+
+	popa
+	ret
+WelcomeScreen ENDP
 
 init PROC	
 	pusha
 	; load files, 
 	
-
+	invoke drd_imageLoadFile, offset filename_start_option, offset start_option
+	invoke drd_imageLoadFile, offset filename_how_to_play_option, offset help_option
+	invoke drd_imageLoadFile, offset filename_welcome, offset welcome
 	invoke drd_imageLoadFile, offset filename_doodle_left , offset doodle_left
 	invoke drd_imageLoadFile, offset filename_doodle_right , offset doodle_right
 	invoke drd_imageLoadFile, offset filename_background , offset background
@@ -709,12 +766,17 @@ init PROC
 	X	mov eax, WIN_WIDTH \ sub eax, doodle_left.iwidth  \ mov doodle.limit_x, eax
 	X	mov eax, WIN_HEIGHT \ sub eax, doodle_left.iheight  \	sub eax, 150	\	mov doodle.limit_y, eax
 	X	mov eax, background.iheight	\	sub eax, WIN_HEIGHT	\	mov background_src_y, eax
+	
+
+	X	mov eax, start_option	\	mov start_game.image, eax
+	X	mov eax, help_option	\	mov how_to_play.image, eax
 
 	; Clearing the green screen off the images
 	invoke drd_imageSetTransparent, offset doodle_left, GREEN
 	invoke drd_imageSetTransparent, offset doodle_right, GREEN
 	invoke drd_imageSetTransparent, offset platform, GREEN
 	invoke drd_imageSetTransparent, offset platform_red, GREEN
+	invoke drd_imageSetTransparent, offset welcome, GREEN
 
 	; initialize all the platforms with random X values 
 	invoke InitPlatforms
@@ -747,8 +809,18 @@ CheckQuit ENDP
 
 main PROC
 
-	invoke drd_init, WIN_WIDTH, WIN_HEIGHT, INIT_WINDOW
+	invoke drd_init, WIN_WIDTH, WIN_HEIGHT, INIT_WINDOWFULL
 	invoke init
+
+
+	welcomeLoop:
+
+		invoke WelcomeScreen
+		invoke drd_processMessages
+		invoke drd_flip
+		invoke CheckQuit
+
+		jmp welcomeLoop
 
 	mainGameLoop:
 		

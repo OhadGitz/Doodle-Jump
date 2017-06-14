@@ -72,6 +72,7 @@
     <Image Include="DoodleLeft.bmp" />
     <Image Include="DoodleRight.bmp" />
     <Image Include="platform.jpg" />
+    <Image Include="WelcomeScreen.bmp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="drd.h" />

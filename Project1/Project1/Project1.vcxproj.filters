@@ -27,28 +27,29 @@
     <Image Include="platform.jpg">
       <Filter>Resource Files</Filter>
     </Image>
+    <Image Include="WelcomeScreen.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="INFO.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="drd.h">
-      <Filter>Source Files</Filter>
+      <Filter>Header Files</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="drd.inc">
-      <Filter>Source Files</Filter>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <Library Include="drd.lib">
-      <Filter>Source Files</Filter>
-    </Library>
   </ItemGroup>
   <ItemGroup>
     <MASM Include="FinalProject.asm">
       <Filter>Source Files</Filter>
     </MASM>
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="drd.lib" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="drd.inc">
+      <Filter>Header Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
