@@ -1,6 +1,3 @@
-;TODO 
-;PUSH PLATS
-;RED PLAT
 include \masm32\include\masm32rt.inc
 
 includelib msvcrt.lib
@@ -11,8 +8,6 @@ WIN_WIDTH equ 1920		; Window's width constant
 WIN_HEIGHT equ 1080		; Wondow's height constant
 
 GREEN equ 000FF00h		; Green color constant
-
-
 
 .data       
 
@@ -145,19 +140,11 @@ X macro args:VARARG
 	asm_txt
 endm
 
-
-
-
-
 ;		***************************************************************
 
 ;							UTILS FUNCTIONS
 
 ;		***************************************************************
-
-
-
-
 
 QuickBreak PROC
 	pusha
@@ -171,7 +158,6 @@ QuickBreak PROC
 	popa
 	ret
 QuickBreak ENDP
-
 
 ; Used to pop a message box with a number in it
 ; Parameters - an unsigned number that will pop up
@@ -274,16 +260,11 @@ Random PROC min:DWORD, max:DWORD
 Random ENDP
 
 
-
-
-
-
 ;		***************************************************************
 
 ;							PLATFORMS FUNCTIONS
 
 ;		***************************************************************
-
 
 
 ; Initialize all the platforms
@@ -492,15 +473,11 @@ PushBackground PROC pixels:DWORD
 PushBackground ENDP
 
 
-
-
-
 ;		***************************************************************
 
 ;							DOODLE FUNCTIONS
 
 ;		***************************************************************
-
 
 
 ; Take care of the doodle's movement on the X axis.
@@ -637,9 +614,6 @@ CheckCollision PROC
 CheckCollision ENDP
 
 
-
-
-
 MoveY PROC	
 	;This is in charge of the doodle's movement on axis Y
 
@@ -696,9 +670,6 @@ MovementManger PROC
 	ret
 
 MovementManger ENDP
-
-
-
 
 
 ;		***************************************************************
@@ -799,7 +770,6 @@ CheckQuit PROC
 	ret
 	
 CheckQuit ENDP
-
 
 
 ;		****************************
